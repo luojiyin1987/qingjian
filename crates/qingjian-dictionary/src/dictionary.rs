@@ -6,7 +6,7 @@ use zerocopy::{FromBytes, Immutable, IntoBytes, KnownLayout};
 
 use crate::error::DictionaryError;
 use crate::matching::Match;
-use crate::pattern::SyllablePattern;
+use crate::pattern::{SyllablePattern, canonical_syllable};
 
 /// 收窄到多小的区间就改成逐键比对。
 const LINEAR_SCAN_LIMIT: usize = 48;
@@ -144,7 +144,7 @@ impl Dictionary {
                 if !first {
                     keys.push(' ');
                 }
-                keys.push_str(syllable);
+                keys.push_str(canonical_syllable(syllable));
                 first = false;
             }
             let actual = keys.len() as u32 - rows.last().unwrap().key_start;
@@ -397,7 +397,7 @@ impl Dictionary {
         let base_len = prefix.len();
         for current in positions[depth].as_ref() {
             prefix.truncate(base_len);
-            prefix.push_str(current.text);
+            prefix.push_str(canonical_syllable(current.text));
             let sub = self.prefix_range(prefix, range.clone());
             if sub.is_empty() {
                 continue;
@@ -639,6 +639,16 @@ mod tests {
             ["法", "发", "乏"]
         );
         assert_eq!(dictionary.len(), 3);
+    }
+
+    #[test]
+    fn normalizes_u_umlaut_keys_and_queries() {
+        let dictionary = Dictionary::parse("略\tlue\t100\n虐\tnve\t90\n").unwrap();
+        assert_eq!(dictionary.entries().next().unwrap().pinyin, "lve");
+        assert_eq!(texts(&dictionary.lookup(&["lue"], false)), ["略"]);
+        assert_eq!(texts(&dictionary.lookup(&["lve"], false)), ["略"]);
+        assert_eq!(texts(&dictionary.lookup(&["nue"], false)), ["虐"]);
+        assert_eq!(texts(&dictionary.lookup(&["nve"], false)), ["虐"]);
     }
 
     #[test]
